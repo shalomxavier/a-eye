@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Face</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .input-method {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #video {
+            margin-bottom: 10px;
+        }
+        .button {
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Add a Face for Recognition</h1>
+        
+        <!-- Name input -->
+        <div>
+            <label for="name">Enter Name:</label>
+            <input type="text" id="name" name="name" required>
+        </div>
+
+        <!-- Camera input method -->
+        <div class="input-method">
+            <h2>Capture from Camera</h2>
+            <video id="video" width="640" height="480" autoplay></video>
+            <canvas id="canvas" width="640" height="480" style="display: none;"></canvas>
+            <br>
+            <button id="capture-btn" class="button">Capture Photo</button>
+        </div>
+
+        <!-- File upload method -->
+        <div class="input-method">
+            <h2>Or Upload an Image</h2>
+            <form id="upload-form" method="post" enctype="multipart/form-data" action="/save-face">
+                <input type="hidden" id="form-name" name="name">
+                <input type="file" id="image" name="image" accept="image/*">
+                <button type="submit" class="button">Upload Image</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const nameInput = document.getElementById('name');
+        const formNameInput = document.getElementById('form-name');
+        const uploadForm = document.getElementById('upload-form');
+
+        // Request camera access
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then((stream) => {
+                video.srcObject = stream;
+            })
+            .catch((err) => {
+                console.error("Error accessing camera: ", err);
+            });
+
+        // Handle capture button click
+        captureBtn.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (!name) {
+                alert('Please enter a name first');
+                return;
+            }
+
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Convert the image to base64 format
+            canvas.toBlob((blob) => {
+                const formData = new FormData();
+                formData.append('name', name);
+                formData.append('image', blob, 'capture.jpg');
+
+                // Send to server
+                fetch('/save-face', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.text())
+                .then(result => {
+                    alert(result);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to save face. Please try again.');
+                });
+            }, 'image/jpeg');
+        });
+
+        // Update hidden name field in form when name input changes
+        nameInput.addEventListener('input', () => {
+            formNameInput.value = nameInput.value;
+        });
+    </script>
+</body>
+</html>

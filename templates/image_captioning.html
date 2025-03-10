@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Camera Image Captioning</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <div class="splash-screen" id="splash-screen">
+    <div class="splash-content">
+      <div class="loading-spinner"></div>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Section 1: Capture Image Button -->
+    <div class="section" id="section1">
+      <button id="capture-btn">Capture Image</button>
+    </div>
+
+    <!-- Section 2: Camera Feed -->
+    <div class="section" id="section2">
+      <video id="video" autoplay></video>
+      <canvas id="canvas" width="640" height="480" style="display: none;"></canvas>
+    </div>
+
+    <!-- Section 3: Record Button and Response -->
+    <div class="section" id="section3">
+      <button type="button" id="record-btn">Hold to Record</button>
+      <input type="hidden" id="auto-content" name="auto-content" />
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const captureBtn = document.getElementById('capture-btn');
+    const queryBox = document.getElementById('query');
+    const autoContent = document.getElementById('auto-content');
+    const recordBtn = document.getElementById('record-btn');
+
+    // Initialize the Web Speech API for speech synthesis
+    const synth = window.speechSynthesis;
+
+    // Initialize the Web Speech API for speech recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    // Variable to track if recording is in progress
+    let isRecording = false;
+
+    // Event listener for when speech recognition starts
+    recognition.onstart = () => {
+      console.log('Voice recognition started. Speak now.');
+      isRecording = true;
+      recordBtn.textContent = 'Recording... Release to Submit';
+    };
+
+    // Event listener for when speech recognition ends
+    recognition.onend = () => {
+      console.log('Voice recognition ended.');
+      isRecording = false;
+      recordBtn.textContent = 'Hold to Record';
+    };
+
+    // Event listener for when speech recognition results are available
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      recordBtn.textContent = transcript;
+      submitQuery(transcript);
+    };
+
+    // Event listener for errors in speech recognition
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      isRecording = false;
+      recordBtn.textContent = 'Hold to Record';
+    };
+
+    // Start recording when the button is pressed
+    recordBtn.addEventListener('mousedown', startRecording);
+    recordBtn.addEventListener('touchstart', startRecording);
+
+    // Stop recording and submit when the button is released
+    recordBtn.addEventListener('mouseup', stopRecording);
+    recordBtn.addEventListener('touchend', stopRecording);
+
+    // Cancel recording if the user moves away while holding
+    recordBtn.addEventListener('mouseleave', cancelRecording);
+    recordBtn.addEventListener('touchcancel', cancelRecording);
+
+    function startRecording(event) {
+      event.preventDefault();
+      if (!isRecording) {
+        // Start recording immediately
+        recognition.start();
+        
+        // Process image in parallel
+        const context = canvas.getContext('2d');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/png');
+
+        fetch('/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageData })
+        })
+        .then(response => response.json())
+        .then(data => {
+          // Update capture button text with the sentence
+          captureBtn.textContent = data.sentence;
+          
+          // Store the auto-filled content without speaking it
+          const newQueryContent =
+            `Analyze the sentence: "${data.sentence}".\n` +
+            `Answer the following question in the shortest number of words possible:\n` +
+            `Question: `;
+          
+          autoContent.value = newQueryContent;
+        })
+        .catch(error => console.error('Error uploading image:', error));
+      }
+    }
+
+
+    function stopRecording(event) {
+      event.preventDefault();
+      if (isRecording) {
+        recognition.stop();
+      }
+    }
+
+    function cancelRecording(event) {
+      event.preventDefault();
+      if (isRecording) {
+        recognition.stop();
+        queryBox.value = ''; // Clear the query if recording is canceled
+      }
+    }
+
+    // Access the camera
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then((stream) => { video.srcObject = stream; })
+      .catch((err) => { console.error("Error accessing camera: ", err); });
+
+    // Capture image and send it to the server
+    captureBtn.addEventListener('click', () => {
+      const context = canvas.getContext('2d');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = canvas.toDataURL('image/png');
+
+      fetch('/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: imageData })
+      })
+      .then(response => response.json())
+      .then(data => {
+        captureBtn.textContent = data.sentence; // Update button text to result
+        
+        // Generate the auto-filled content
+        const newQueryContent =
+          `Analyze the sentence: "${data.sentence}".\n` +
+          `Answer the following question in the shortest number of words possible:\n` +
+          `Question: `;
+
+        // Store the auto-filled content in the hidden input field
+        autoContent.value = newQueryContent;
+
+        // Read the generated sentence aloud
+        speakSentence(data.sentence);
+      })
+      .catch(error => console.error('Error uploading image:', error));
+    });
+
+    // Function to read the sentence aloud
+    function speakSentence(sentence) {
+      if (synth.speaking) {
+        console.error('SpeechSynthesis is already speaking.');
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(sentence);
+      utterance.lang = 'en-US'; // Set the language
+      utterance.rate = 1; // Speed of speech (1 is normal)
+      utterance.pitch = 1; // Pitch of speech (1 is normal)
+
+      // Event listener for when speech finishes
+      utterance.onend = () => {
+        console.log('Finished speaking.');
+      };
+
+      // Event listener for errors
+      utterance.onerror = (event) => {
+        console.error('SpeechSynthesis error:', event.error);
+      };
+
+      // Speak the sentence
+      synth.speak(utterance);
+    }
+
+    // Function to submit the query
+    function submitQuery(transcript) {
+      const fullQuery = autoContent.value + transcript;
+
+      fetch('/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: fullQuery })
+      })
+      .then(response => response.json())
+      .then(data => {
+        recordBtn.textContent = `You said: ${transcript}\n\nResponse: ${data.response}`;
+        speakSentence(data.response);
+      })
+      .catch(error => console.error('Error:', error));
+    }
+
+    // Splash screen handling
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const splash = document.getElementById('splash-screen');
+        splash.style.opacity = '0';
+        setTimeout(() => {
+          splash.style.display = 'none';
+        }, 500);
+      }, 1000); // Show splash screen for 1 second
+    });
+  </script>
+</body>
+</html>
