@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  PROJECT_ID: your-project-id
+  PROJECT_ID: a-eye-453306
   REGION: us-central1
   SERVICE_NAME: flask-app
 
