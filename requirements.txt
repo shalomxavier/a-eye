@@ -7,3 +7,4 @@ deepface
 ollama
 torch
 torchvision
+dlib==19.24.2
