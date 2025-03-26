@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Face | A - Eye Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            position: relative;
+            overflow-y: auto;
+            min-height: 100vh;
+        }
+        .page-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            min-height: 100vh;
+        }
+        .content-wrapper {
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+        .section-container {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .video-container {
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #000;
+        }
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <!-- Navigation -->
+        <div style="padding: 20px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+            <a href="/" style="color: var(--text-secondary); text-decoration: none;">
+                <i class="fas fa-arrow-left" style="color: var(--accent-color);"></i> Back to Home
+            </a>
+        </div>
+
+        <div class="content-wrapper">
+            <div style="text-align: center;">
+                <h1 style="font-size: 2em; margin-bottom: 10px;">
+                    <span style="color: var(--accent-color);">Add</span> <span style="color: var(--accent-color);">Face</span>
+                </h1>
+                <p style="color: var(--text-secondary); margin-bottom: 30px;">Train the AI to recognize new faces</p>
+            </div>
+            
+            <!-- Name input -->
+            <div class="section-container" style="text-align: center;">
+                <label for="name" style="display: block; margin-bottom: 15px; color: var(--text-secondary);">Enter Name:</label>
+                <input type="text" id="name" name="name" required 
+                    style="background: rgba(255, 255, 255, 0.05);
+                           border: 1px solid rgba(255, 255, 255, 0.1);
+                           padding: 12px 20px;
+                           border-radius: 8px;
+                           color: var(--text-primary);
+                           font-size: 16px;
+                           width: 300px;
+                           max-width: 100%;">
+            </div>
+
+            <!-- Camera input method -->
+            <div class="section-container">
+                <h2 style="font-size: 1.5em; margin-bottom: 20px; text-align: center;">
+                    <i class="fas fa-camera" style="color: var(--accent-color);"></i> Capture Multiple Photos
+                </h2>
+                <div class="video-container">
+                    <video id="video" autoplay></video>
+                </div>
+                <canvas id="canvas" width="640" height="480" style="display: none;"></canvas>
+                <div style="text-align: center; margin-top: 20px;">
+                    <div id="capture-count" style="color: var(--text-secondary); margin-bottom: 10px;">Photos captured: 0/5</div>
+                    <button id="capture-btn" class="button">
+                        <i class="fas fa-camera" style="color: var(--accent-color);"></i> Capture Photo
+                    </button>
+                    <button id="submit-captures" class="button" style="display: none; margin-left: 10px;">
+                        <i class="fas fa-save" style="color: var(--accent-color);"></i> Save All Photos
+                    </button>
+                </div>
+            </div>
+
+            <!-- File upload method -->
+            <div class="section-container">
+                <h2 style="font-size: 1.5em; margin-bottom: 20px; text-align: center;">
+                    <i class="fas fa-upload" style="color: var(--accent-color);"></i> Upload an Image
+                </h2>
+                <form id="upload-form" method="post" enctype="multipart/form-data" action="/save-face" style="text-align: center;">
+                    <input type="hidden" id="form-name" name="name">
+                    <div style="margin-bottom: 20px;">
+                        <input type="file" id="image" name="image" accept="image/*" style="display: none;">
+                        <label for="image" class="button" style="display: inline-block; cursor: pointer;">
+                            <i class="fas fa-file-upload" style="color: var(--accent-color);"></i> Choose File
+                        </label>
+                        <div id="file-name" style="color: var(--text-secondary); margin-top: 10px;">No file chosen</div>
+                    </div>
+                    <button type="submit" class="button">
+                        <i class="fas fa-upload" style="color: var(--accent-color);"></i> Upload
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const nameInput = document.getElementById('name');
+        const formNameInput = document.getElementById('form-name');
+        const uploadForm = document.getElementById('upload-form');
+        const fileInput = document.getElementById('image');
+        const fileNameDisplay = document.getElementById('file-name');
+        const captureCount = document.getElementById('capture-count');
+        const submitCaptures = document.getElementById('submit-captures');
+        let captures = [];
+        const REQUIRED_CAPTURES = 5;
+
+        // Update file name display
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                fileNameDisplay.textContent = this.files[0].name;
+            } else {
+                fileNameDisplay.textContent = 'No file chosen';
+            }
+        });
+
+        // Request camera access
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then((stream) => {
+                video.srcObject = stream;
+            })
+            .catch((err) => {
+                console.error("Error accessing camera: ", err);
+            });
+
+        // Handle capture button click
+        captureBtn.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (!name) {
+                alert('Please enter a name first');
+                return;
+            }
+
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            canvas.toBlob((blob) => {
+                captures.push(blob);
+                captureCount.textContent = `Photos captured: ${captures.length}/${REQUIRED_CAPTURES}`;
+                
+                if (captures.length >= REQUIRED_CAPTURES) {
+                    captureBtn.disabled = true;
+                    submitCaptures.style.display = 'inline-block';
+                }
+            }, 'image/jpeg');
+        });
+
+        // Handle submit all captures
+        submitCaptures.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            const formData = new FormData();
+            formData.append('name', name);
+            
+            captures.forEach((blob, index) => {
+                formData.append('images', blob, `capture_${index}.jpg`);
+            });
+
+            // Send to server
+            fetch('/save-faces', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(result => {
+                alert(result);
+                // Reset captures
+                captures = [];
+                captureCount.textContent = `Photos captured: 0/${REQUIRED_CAPTURES}`;
+                captureBtn.disabled = false;
+                submitCaptures.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to save faces. Please try again.');
+            });
+        });
+
+        // Update hidden name field in form when name input changes
+        nameInput.addEventListener('input', () => {
+            formNameInput.value = nameInput.value;
+        });
+    </script>
+</body>
+</html>

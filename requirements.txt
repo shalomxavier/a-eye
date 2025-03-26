@@ -1,0 +1,9 @@
+flask
+pillow
+transformers
+ultralytics
+face-recognition
+deepface
+ollama
+torch
+torchvision
